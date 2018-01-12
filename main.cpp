@@ -103,18 +103,14 @@ void cameraLoop() {
     stream1.set(CV_CAP_PROP_FRAME_HEIGHT, max_height);
 //    stream1.set(CV_CAP_PROP_CONVERT_RGB , false);
     while (!time_to_exit) {
-        timestampcamera_ns = boost::lexical_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                std::chrono::system_clock::now().time_since_epoch()).count());
-
-        pthread_mutex_lock(&_mutexFrameCam1Last);
-
-        stream1 >> matFrameForward;
+        stream1 >> matFrameForward; 
+        timestampcamera_ns = boost::lexical_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
         matFrameForward.convertTo(matFrameForward, CV_8U);
         cv::cvtColor(matFrameForward, matFrameForward, CV_BGR2GRAY);
-
+        
+        pthread_mutex_lock(&_mutexFrameCam1Last);
         qFrame.push(matFrameForward);
         qTime.push(timestampcamera_ns);
-
         pthread_mutex_unlock(&_mutexFrameCam1Last);
 //
         std::cout << "read matFrameForward size : " << matFrameForward.size() << std::endl;
@@ -122,7 +118,6 @@ void cameraLoop() {
         if (cv::waitKey(1) >= 0) break;
 
         totalFrame++;
-        usleep(800000);
     }
     std::cout << "#Frame = " << totalFrame << std::endl;
 }
@@ -136,7 +131,8 @@ void cameraRecord() {
     while (!time_to_exit || !qFrame.empty()) {
         //std::cout << "";
         if (matFrameForward.cols != max_width) continue;
-        if (!qFrame.empty()) {
+        while (qFrame.empty()) usleep(1000);
+        {
 
             int OldPrio = 0;
             pthread_mutex_setprioceiling(&_mutexFrameCam1Last, 0, &OldPrio);
@@ -144,7 +140,8 @@ void cameraRecord() {
 
             recFrameForward = qFrame.front();
             timestampcamera = qTime.front();
-
+	    qFrame.pop();
+            qTime.pop();
             pthread_mutex_unlock(&_mutexFrameCam1Last);
 
             imwrite("./record_data/cam0/" + std::to_string(timestampcamera) + ".png", recFrameForward);
@@ -152,9 +149,6 @@ void cameraRecord() {
             totalRecord++;
 
             recFrameForward.copyTo(lastestFrameForward);
-
-            qFrame.pop();
-            qTime.pop();
         }
     }
     std::cout << "#Record = " << totalRecord << std::endl;
